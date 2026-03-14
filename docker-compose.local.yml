@@ -1,0 +1,88 @@
+# ═══════════════════════════════════════════════════════════════════════
+#  FleetOps — docker-compose.local.yml
+#  Desarrollo local sin dominio ni SSL
+#
+#  Uso:
+#    docker compose -f docker-compose.local.yml up -d --build
+#
+#  Acceso:
+#    Frontend → http://localhost:5173
+#    API      → http://localhost:3000
+# ═══════════════════════════════════════════════════════════════════════
+
+services:
+
+  # ── PostgreSQL ─────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: fleetops-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: fleetops
+      POSTGRES_USER: fleetops
+      POSTGRES_PASSWORD: fleetops_local
+    volumes:
+      - pg-data-local:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U fleetops" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Backend NestJS (hot reload con ts-node-dev) ────────────────────
+  api:
+    build:
+      context: ../cinexo-fleet-panel/fleetops-backend
+      target: dev # usa el stage dev del Dockerfile
+    container_name: fleetops-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: 3000
+      PGHOST: postgres
+      PGPORT: 5432
+      PGDATABASE: fleetops
+      PGUSER: fleetops
+      PGPASSWORD: fleetops_local
+      JWT_SECRET: dev-secret-local-no-usar-en-prod
+      ENC_KEY: dev-enc-key-32ch!!!!!!!!!!!!!!!!
+      ADMIN_PASSWORD: admin123
+      KEYS_DIR: /data/keys
+      FRONTEND_URL: "*"
+    volumes:
+      - ../cinexo-fleet-panel/fleetops-backend/src:/app/src # hot reload — solo src
+      - ssh-keys-local:/data/keys
+      - api-node-modules:/app/node_modules
+
+  # ── Frontend (Vite dev server) ─────────────────────────────────────
+  frontend-dev:
+    image: node:20-alpine
+    container_name: fleetops-frontend
+    working_dir: /app
+    volumes:
+      - ../cinexo-fleet-panel/fleetops-frontend:/app
+      - frontend-node-modules:/app/node_modules
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_API_URL: http://localhost:3000
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    depends_on:
+      - api
+
+volumes:
+  pg-data-local:
+  ssh-keys-local:
+  api-node-modules:
+  frontend-node-modules:
+
+
+networks:
+  default:
+    driver: bridge

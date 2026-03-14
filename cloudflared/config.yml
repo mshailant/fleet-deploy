@@ -1,0 +1,33 @@
+# cloudflared/config.yml
+tunnel: d2289165-def9-4fe9-b0a7-393f9610107d
+
+ingress:
+
+  - hostname: panel.monitoreocinexo.com.ar
+    path: /ws/ssh
+    service: http://api:3000
+    originRequest:
+      noTLSVerify: true
+      connectTimeout: 10s
+      httpHostHeader: panel.monitoreocinexo.com.ar
+
+  - hostname: panel.monitoreocinexo.com.ar
+    path: /ws/agent
+    service: http://api:3000
+    originRequest:
+      noTLSVerify: true
+      connectTimeout: 10s
+      httpHostHeader: panel.monitoreocinexo.com.ar
+
+  - hostname: panel.monitoreocinexo.com.ar
+    path: /api/*
+    service: http://api:3000
+    originRequest:
+      noTLSVerify: true
+
+  - hostname: panel.monitoreocinexo.com.ar
+    service: http://web:80
+    originRequest:
+      noTLSVerify: true
+
+  - service: http_status:404

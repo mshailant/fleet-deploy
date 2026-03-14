@@ -1,0 +1,100 @@
+# ═══════════════════════════════════════════════════════════════════════
+#  FleetOps — docker-compose.yml  (producción con Cloudflare Tunnel)
+#
+#  ✓ Sin Nginx público    — Cloudflare termina SSL
+#  ✓ Sin puertos abiertos — cloudflared conecta hacia afuera
+#  ✓ WebSocket            — soportado nativamente
+#
+#  Antes de levantar:
+#    cp .env.example .env && nano .env
+# ═══════════════════════════════════════════════════════════════════════
+
+services:
+
+  # ── PostgreSQL ─────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: fleetops-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       ${PGDATABASE:-fleetops}
+      POSTGRES_USER:     ${PGUSER:-fleetops}
+      POSTGRES_PASSWORD: ${PGPASSWORD}
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PGUSER:-fleetops}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Backend NestJS ─────────────────────────────────────────────────
+  api:
+    build:
+      context: ./backend
+    container_name: fleetops-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PORT:           3000
+      PGHOST:         postgres
+      PGPORT:         5432
+      PGDATABASE:     ${PGDATABASE:-fleetops}
+      PGUSER:         ${PGUSER:-fleetops}
+      PGPASSWORD:     ${PGPASSWORD}
+      JWT_SECRET:     ${JWT_SECRET}
+      ENC_KEY:        ${ENC_KEY}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-fleetops123}
+      KEYS_DIR:       /data/keys
+      FRONTEND_URL:   "https://${DOMAIN}"
+    volumes:
+      - ssh-keys:/data/keys
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # ── Frontend React ─────────────────────────────────────────────────
+  web:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: "https://${DOMAIN}"
+    container_name: fleetops-web
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - internal
+
+  # ── Cloudflare Tunnel ──────────────────────────────────────────────
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: fleetops-tunnel
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
+    volumes:
+      - ./cloudflared/config.yml:/etc/cloudflared/config.yml:ro
+    networks:
+      - internal
+    depends_on:
+      - api
+      - web
+
+volumes:
+  pg-data:
+  ssh-keys:
+
+networks:
+  internal:
+    driver: bridge
