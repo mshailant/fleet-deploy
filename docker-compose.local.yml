@@ -72,7 +72,21 @@ services:
       - "5173:5173"
     environment:
       VITE_API_URL: http://localhost:3000
-    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    command: sh -c "npm install && CHOKIDAR_USEPOLLING=true npm run dev -- --host 0.0.0.0"
+    depends_on:
+      - api
+
+  # ── Cloudflare Tunnel ─────────────────────────────────────────────
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: fleetops-tunnel
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: eyJhIjoiNjIyYTQwNGRmNWQyY2RiOGEzYjZkYWFjYTVkYjE0MzAiLCJzIjoiVTZRMmJPRGVTSTRYNTRyZk0vblJ4bEFFS3hjRm5UMHRvVUcxZGEzYWh4Yz0iLCJ0IjoiZDIyODkxNjUtZGVmOS00ZmU5LWIwYTctMzkzZjk2MTAxMDdkIn0=
+    volumes:
+      - ./cloudflared/config.local.yml:/etc/cloudflared/config.yml:ro
+    network_mode: host
     depends_on:
       - api
 
